@@ -2,20 +2,13 @@
 # -*- coding: UTF-8 -*-
 
 import paths
-import argparse
-import sys, os
-import logging
-import subprocess
-import os.path
-import datetime
+import argparse, logging
+import sys, os, os.path, subprocess
+import datetime, time
 
 
 
-
-
-
-
-
+time_format = "%Y-%m-%d %H:%M:%S"
 
 
 
@@ -64,12 +57,45 @@ def afterHourOfDay(hour):
 
 # backup frequency related
 def isDailyBackupTime():
-    return True
-def isWeeklyBackupTime():
-    return True
-def isMonthlyBackupTime():
-    return True
+    lastDateTime = getLastDateTime('daily')
+    hours = (now - lastDateTime).seconds / 3600
+    logger.debug('%i hours ago' % hours)
+    
+    # logic here
+    if hours >= 12 and now.day != lastDateTime.day:
+        return True
+    return False
 
+def isWeeklyBackupTime():
+    lastDateTime = getLastDateTime('weekly')
+    days = (now - lastDateTime).days
+    logger.debug('%i days ago' % days)
+    
+    # logic here
+    if days >= 7:
+        return True
+    return False
+
+def isMonthlyBackupTime():
+    lastDateTime = getLastDateTime('monthly')
+    days = (now - lastDateTime).days
+    logger.debug('%i days ago' % days)
+    
+    # logic here
+    if days >= 30:
+        return True
+    return False
+
+
+def getLastDateTime(scope):
+    try:
+        lastDateString = readFromFile(settingsDir + '/last_' + scope + '_datetime').strip()
+    except IOError:
+        lastDateString = "2000-01-01 00:00:00"
+    logger.debug('Current time: ' + str(now))
+    logger.info('Last %s backup: %s' % (scope, str(lastDateString)))
+    lastDateTime = datetime.datetime.fromtimestamp(time.mktime(time.strptime(lastDateString, time_format)))
+    return lastDateTime
 
 
 # interaction
@@ -85,14 +111,14 @@ def notifyByEMail():
 def callRsnapshot(timecode):
     # TODO save date to file
     #   orig: date > "~/backup_date.txt"
-    # TODO call rsnapshot
+    executeCommand(['time', 'sudo', 'rsnapshot', timecode])
     # TODO remove date file
     return True
 
 def doSystemUpgrade():
     logger.info('System upgrade...')
-    #executeCommand(['sudo', 'apt-get', 'update'], obeyDry = True)
-    #executeCommand(['sudo', 'apt-get', 'dist-upgrade', '-y'], obeyDry = True)
+    executeCommand(['sudo', 'apt-get', 'update'], obeyDry = True)
+    executeCommand(['sudo', 'apt-get', 'dist-upgrade', '-y'], obeyDry = True)
     return True
 
 def backupPackageSelection(targetPath = '~/packages.txt'):
@@ -100,14 +126,11 @@ def backupPackageSelection(targetPath = '~/packages.txt'):
     if not dry:
         res = getCommandOutput('dpkg --get-selections', obeyDry = True)
         targetPath = targetPath.replace('~', homeDir)
-        f = open(targetPath, 'w')
-        f.write(res)
-        f.close()
+        writeToFile(targetPath, res)
         ownFile(targetPath)
     return True    
 
 def downloadSingleFile(url, localFilename):
-    logger.info('Downloading Google calender...')
     localFilename = localFilename.replace('~', homeDir)
     # delete, download, own
     try:
@@ -115,28 +138,39 @@ def downloadSingleFile(url, localFilename):
     except OSError:
         pass    
     executeCommand(['wget', '-nc', '-O', localFilename, '-c', paths.GOOGLE_CALENDER_URL], obeyDry = True)
-    ownfile(localFilename)
+    ownFile(localFilename)
     return True
 
 def backupGoogleCalender(url, localFilename):
+    logger.info('Downloading Google calender...')
     return downloadSingleFile(url, localFilename)
 
-def syncDirectories(source, target):
+def syncDirectories(source, target, name=''):
+    logger.info('Syncing directories%s' % ('...' if name == '' else ' (' + name + ')...'))
+    executeCommand(['su', username, '-c', 'rsync -avzrEL --delete ' + source + ' ' + target], obeyDry = True)
     return True
 
+def isRespondingToPing(host):
+    try:
+        subprocess.check_call(['ping', '-qn', '-c', '1', host])
+    except subprocess.CalledProcessError:
+        logger.info('Host "%s" is not responding to ping attempt' % host)
+        return False
+    return True
 
 
 # python/linux binding
 def getCommandOutput(command, obeyDry = False):
     if obeyDry and dry:
-        logger.debug(command)
+        logger.debug('Executing: ' + str(command))
         return True
     return subprocess.getoutput(command)
 
-def executeCommand(command, obeyDry = False, shell = False):
+def executeCommand(command, obeyDry = False, shell = False, silent = False):
     if obeyDry and dry:
-        logger.debug(command)
+        logger.debug('Executing: ' + str(command))
         return True
+    # TODO obey silent parameter (set stdout to None?)
     return subprocess.call(command, shell=shell)
 
 def ownFile(filename):
@@ -144,6 +178,17 @@ def ownFile(filename):
 def ownDir(path):
     getCommandOutput('chown -R %s:%s %s' % (username, username, path), obeyDry = True)
 
+def writeToFile(filename, content):
+    try:
+        os.remove(filename)
+    except OSError:
+        pass 
+    f = open(filename, 'w')
+    f.write(content)
+    f.close()
+
+def readFromFile(filename):
+    return open(filename, 'r').read()
 
 
 
@@ -158,6 +203,7 @@ logger.addHandler(sysohdlr)
 
 logger.setLevel(logging.DEBUG)
 dry = False
+now = datetime.datetime.now()
 
 
 # parse parameters
@@ -184,6 +230,10 @@ except OSError:
 ownDir(settingsDir)
 
 # now we can log to the apropriate file as well
+try:
+    os.remove(settingsDir + '/runlog.log')
+except OSError:
+    pass
 hdlr = logging.FileHandler(settingsDir + '/runlog.log')
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
@@ -204,8 +254,21 @@ if not afterHourOfDay(10):
     sys.exit(1)
 
 # some rsyncing data around
+for path in paths.SYNC_PATHS:
+    try:
+        if 'pingList' in path:
+            # make sure all the servers do respond to a ping
+            for host in path['pingList']:
+               if not isRespondingToPing(host):
+                  raise StopIteration
+               
+    except StopIteration:
+       continue
+    # actually sync
+    syncDirectories(path['source'], path['destination'], path['name'] if 'name' in path else '')
 
-# coordinate rsnapshot
+
+# daily stuff
 if isDailyBackupTime():
     # updates
     doSystemUpgrade()
@@ -213,26 +276,31 @@ if isDailyBackupTime():
     backupPackageSelection()
     # save calender
     backupGoogleCalender(paths.GOOGLE_CALENDER_URL, paths.GOOGLE_LOCAL_TARGET)
-
-    logger.info('Daily backup...')
     pass
+
+# rsnapshot part
+if isMonthlyBackupTime():
+    logger.info('Monthly backup...')
+    callRsnapshot('monthly')
+    writeToFile(settingsDir + '/last_monthly_datetime', now.strftime(time_format))
 
 if isWeeklyBackupTime():
     logger.info('Weekly backup...')
-    pass
+    callRsnapshot('weekly')
+    writeToFile(settingsDir + '/last_weekly_datetime', now.strftime(time_format))
 
-if isMonthlyBackupTime():
-    logger.info('Monthly backup...')
-    pass
+if isDailyBackupTime():
+    logger.info('Daily backup...')
+    callRsnapshot('daily')
+    writeToFile(settingsDir + '/last_daily_datetime', now.strftime(time_format))
 
-#Popen(args, bufsize=0, executable=None, stdin=None, stdout=None, stderr=None, preexec_fn=None, close_fds=False, shell=False, cwd=None, env=None, universal_newlines=False, startupinfo=None, creationflags=0)
 
 # notifications
-# send report via mail
+# send log file via mail
 
 
 
 # cleanup
-# reown settings dir
+# reown settings directory
 ownDir(settingsDir)
 
