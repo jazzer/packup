@@ -58,7 +58,7 @@ def afterHourOfDay(hour):
 # backup frequency related
 def isDailyBackupTime():
     lastDateTime = getLastDateTime('daily')
-    hours = (now - lastDateTime).seconds / 3600
+    hours = (now - lastDateTime).seconds / 3600 + (now - lastDateTime).days * 24
     logger.debug('%i hours ago' % hours)
     
     # logic here
@@ -109,10 +109,12 @@ def notifyByEMail():
 
 # backup functions
 def callRsnapshot(timecode):
-    # TODO save date to file
-    #   orig: date > "~/backup_date.txt"
-    executeCommand(['time', 'sudo', 'rsnapshot', timecode])
-    # TODO remove date file
+    dateFilename = homeDir + '/backup_date.txt'
+    # save date to file
+    writeToFile(dateFilename, str(datetime.datetime.now()))
+    executeCommand(['time', 'sudo', 'rsnapshot', timecode], obeyDry = True, shell=True)
+    # remove date file
+    removeFile(dateFilename)
     return True
 
 def doSystemUpgrade():
@@ -133,10 +135,7 @@ def backupPackageSelection(targetPath = '~/packages.txt'):
 def downloadSingleFile(url, localFilename):
     localFilename = localFilename.replace('~', homeDir)
     # delete, download, own
-    try:
-        os.remove(localFilename)
-    except OSError:
-        pass    
+    removeFile(localFilename)
     executeCommand(['wget', '-nc', '-O', localFilename, '-c', paths.GOOGLE_CALENDER_URL], obeyDry = True)
     ownFile(localFilename)
     return True
@@ -147,12 +146,12 @@ def backupGoogleCalender(url, localFilename):
 
 def syncDirectories(source, target, name=''):
     logger.info('Syncing directories%s' % ('...' if name == '' else ' (' + name + ')...'))
-    executeCommand(['su', username, '-c', 'rsync -avzrEL --delete ' + source + ' ' + target], obeyDry = True)
+    executeCommand(['su', username, '-c', 'rsync -avzrEL --delete ' + source + ' ' + target], obeyDry = True, shell=True)
     return True
 
 def isRespondingToPing(host):
     try:
-        subprocess.check_call(['ping', '-qn', '-c', '1', host])
+        subprocess.check_call(['ping', '-qn', '-c', '1', host], stdout=open('/dev/null', 'w'))
     except subprocess.CalledProcessError:
         logger.info('Host "%s" is not responding to ping attempt' % host)
         return False
@@ -167,16 +166,36 @@ def getCommandOutput(command, obeyDry = False):
     return subprocess.getoutput(command)
 
 def executeCommand(command, obeyDry = False, shell = False, silent = False):
+    out = subprocess.STDOUT
+    if silent:
+        out = open('/dev/null', 'w')
+
+    logger.debug('Original command %s' % str(command))
+    if verbose:
+        logfilename = settingsDir + '/runlog.log'
+        for elem in ['|', 'tee', logfilename]:
+            command.append(elem);
+    else:
+        for elem in ['>>', logfilename]:
+            command.append(elem);
+    logger.debug('Changed command %s' % str(command))
+
     if obeyDry and dry:
         logger.debug('Executing: ' + str(command))
         return True
-    # TODO obey silent parameter (set stdout to None?)
-    return subprocess.call(command, shell=shell)
+
+    return subprocess.call(command, shell=shell)#, stdout=out)
 
 def ownFile(filename):
     getCommandOutput('chown %s:%s %s' % (username, username, filename), obeyDry = True)
 def ownDir(path):
     getCommandOutput('chown -R %s:%s %s' % (username, username, path), obeyDry = True)
+
+def removeFile(filename):
+    try:
+        os.remove(filename)
+    except OSError:
+        pass
 
 def writeToFile(filename, content):
     try:
@@ -203,10 +222,11 @@ logger.addHandler(sysohdlr)
 
 logger.setLevel(logging.DEBUG)
 dry = False
+verbose = True
 now = datetime.datetime.now()
 
 
-# parse parameters
+# parse arguments
 parser = argparse.ArgumentParser(description='Backup script based on rsnapshot, Unix magic, and python.')
 # TODO implement (verbose, dry-run, ...)
 
@@ -230,10 +250,7 @@ except OSError:
 ownDir(settingsDir)
 
 # now we can log to the apropriate file as well
-try:
-    os.remove(settingsDir + '/runlog.log')
-except OSError:
-    pass
+removeFile(settingsDir + '/runlog.log')
 hdlr = logging.FileHandler(settingsDir + '/runlog.log')
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
