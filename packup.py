@@ -112,15 +112,15 @@ def callRsnapshot(timecode):
     dateFilename = homeDir + '/backup_date.txt'
     # save date to file
     writeToFile(dateFilename, str(datetime.datetime.now()))
-    executeCommand(['time', 'sudo', 'rsnapshot', timecode], obeyDry = True, shell=True)
+    executeCommand('time sudo rsnapshot ' + timecode, obeyDry = True, shell=True)
     # remove date file
     removeFile(dateFilename)
     return True
 
 def doSystemUpgrade():
     logger.info('System upgrade...')
-    executeCommand(['sudo', 'apt-get', 'update'], obeyDry = True)
-    executeCommand(['sudo', 'apt-get', 'dist-upgrade', '-y'], obeyDry = True)
+    executeCommand('sudo apt-get update', obeyDry = True)
+    executeCommand('sudo apt-get dist-upgrade -y', obeyDry = True)
     return True
 
 def backupPackageSelection(targetPath = '~/packages.txt'):
@@ -136,7 +136,7 @@ def downloadSingleFile(url, localFilename):
     localFilename = localFilename.replace('~', homeDir)
     # delete, download, own
     removeFile(localFilename)
-    executeCommand(['wget', '-nc', '-O', localFilename, '-c', paths.GOOGLE_CALENDER_URL], obeyDry = True)
+    executeCommand('wget -nc -O "%s" -c "%s"' % (localFilename, paths.GOOGLE_CALENDER_URL), obeyDry = True)
     ownFile(localFilename)
     return True
 
@@ -146,45 +146,44 @@ def backupGoogleCalender(url, localFilename):
 
 def syncDirectories(source, target, name=''):
     logger.info('Syncing directories%s' % ('...' if name == '' else ' (' + name + ')...'))
-    executeCommand(['su', username, '-c', 'rsync -avzrEL --delete ' + source + ' ' + target], obeyDry = True, shell=True)
+    executeCommand("su %s -c 'rsync -avzrEL --delete %s %s'" % (username, source, target), obeyDry = True, shell=True)
     return True
 
 def isRespondingToPing(host):
-    try:
-        subprocess.check_call(['ping', '-qn', '-c', '1', host], stdout=open('/dev/null', 'w'))
-    except subprocess.CalledProcessError:
+    good = ' 0% packet loss' in getCommandOutput('ping -qn -c 1 "%s"' % host, obeyDry = False)
+    if not good:
         logger.info('Host "%s" is not responding to ping attempt' % host)
         return False
+    logger.info('Host "%s" is reachable' % host)
     return True
 
 
 # python/linux binding
 def getCommandOutput(command, obeyDry = False):
+    logger.debug('Executing: ' + str(command))
     if obeyDry and dry:
-        logger.debug('Executing: ' + str(command))
         return True
     return subprocess.getoutput(command)
 
-def executeCommand(command, obeyDry = False, shell = False, silent = False):
+def executeCommand(command, obeyDry = False, shell = True, silent = False):
     out = subprocess.STDOUT
     if silent:
         out = open('/dev/null', 'w')
 
     logger.debug('Original command %s' % str(command))
     if verbose:
-        logfilename = settingsDir + '/runlog.log'
-        for elem in ['|', 'tee', logfilename]:
-            command.append(elem);
+        command = command + (' | tee -a "%s"' % logFilename)
     else:
-        for elem in ['>>', logfilename]:
-            command.append(elem);
+        command = command + (' >> "%s"' % logFilename)
     logger.debug('Changed command %s' % str(command))
 
     if obeyDry and dry:
         logger.debug('Executing: ' + str(command))
         return True
 
-    return subprocess.call(command, shell=shell)#, stdout=out)
+    proc = subprocess.Popen(command, shell=shell)#, stdout=out)
+    proc.wait()
+    return proc
 
 def ownFile(filename):
     getCommandOutput('chown %s:%s %s' % (username, username, filename), obeyDry = True)
@@ -250,14 +249,16 @@ except OSError:
 ownDir(settingsDir)
 
 # now we can log to the apropriate file as well
-removeFile(settingsDir + '/runlog.log')
-hdlr = logging.FileHandler(settingsDir + '/runlog.log')
+logFilename = settingsDir + '/runlog.log'
+removeFile(logFilename)
+hdlr = logging.FileHandler(logFilename)
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
 
 logger.info('Running in %s\'s account.' % username)
 logger.info('Home directory: %s' % homeDir)
 logger.info('Settings directory: %s' % settingsDir)
+ownFile(logFilename)
 
 
 # check if preconditions are met
@@ -269,6 +270,19 @@ if not isWirelessAvailible(paths.WIRELESS_NETWORK_SSID):
     sys.exit(1)
 if not afterHourOfDay(10):
     sys.exit(1)
+
+
+
+# daily stuff
+if isDailyBackupTime():
+    # updates
+    doSystemUpgrade()
+    # save packages installed on the system
+    backupPackageSelection()
+    # save calender
+    backupGoogleCalender(paths.GOOGLE_CALENDER_URL, paths.GOOGLE_LOCAL_TARGET)
+    pass
+
 
 # some rsyncing data around
 for path in paths.SYNC_PATHS:
@@ -285,15 +299,6 @@ for path in paths.SYNC_PATHS:
     syncDirectories(path['source'], path['destination'], path['name'] if 'name' in path else '')
 
 
-# daily stuff
-if isDailyBackupTime():
-    # updates
-    doSystemUpgrade()
-    # save packages installed on the system
-    backupPackageSelection()
-    # save calender
-    backupGoogleCalender(paths.GOOGLE_CALENDER_URL, paths.GOOGLE_LOCAL_TARGET)
-    pass
 
 # rsnapshot part
 if isMonthlyBackupTime():
