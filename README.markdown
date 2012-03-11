@@ -1,9 +1,9 @@
-# Install
+## Install
 
-## Requirements
+##### Requirements
     sudo apt-get install git python3 
 
-## Get the Code
+##### Get the Code
 
 change do your prefered path with cd, then
 
@@ -13,9 +13,9 @@ change do your prefered path with cd, then
     gedit data.py
 
 
-# What now?
+## What now?
 
-## Alias
+##### Add an Alias
 
 To make running a backup as convinient as possible, you can define an alias in
 ~/.bash_aliases like so: 
@@ -33,7 +33,7 @@ a backup can be run by typing
 to the terminal.
 
 
-## No password
+##### No Password
 
 Run
 
@@ -44,4 +44,5 @@ and add
     # enable password-less backup
     johannes        ALL=(ALL)NOPASSWD:/home/johannes/Software/Backup/packup/packup.py
 
-while of course replacing your username and path.
+while of course replacing your username and path. Exit vi(m) by typing :x and 
+return.
