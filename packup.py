@@ -78,11 +78,11 @@ def afterHourOfDay(hour):
 # backup frequency related
 def isOlder(days, title):
     lastDateTime = getLastDateTime(title)
-    days = (now - lastDateTime).days
+    daysAgo = (now - lastDateTime).days
     logger.debug('%i days ago' % days)
     
     # logic here
-    if days >= days:
+    if daysAgo >= days:
         return True
     return False
 
