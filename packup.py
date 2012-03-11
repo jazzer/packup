@@ -263,7 +263,8 @@ if isOlder(1, 'update'):
     # save packages installed on the system
     backupPackageSelection()
     # save calender
-    backupGoogleCalender(data.GOOGLE_CALENDER_URL, data.GOOGLE_LOCAL_TARGET)
+    if not data.GOOGLE_CALENDER_URL is None:
+        backupGoogleCalender(data.GOOGLE_CALENDER_URL, data.GOOGLE_LOCAL_TARGET)
     writeToFile(settingsDir + 'update_datetime', now.strftime(time_format))
     pass
 
