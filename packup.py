@@ -263,26 +263,28 @@ if isOlder(1, 'update'):
     # save packages installed on the system
     backupPackageSelection()
     # save calender
-    if not data.GOOGLE_CALENDER_URL is None:
+    try:
         backupGoogleCalender(data.GOOGLE_CALENDER_URL, data.GOOGLE_LOCAL_TARGET)
+    except AttributeError:
+        pass # no calender backup...
     writeToFile(settingsDir + 'update_datetime', now.strftime(time_format))
     pass
 
 
-    # some rsyncing data around
-    for path in data.SYNC_PATHS:
-        try:
-            if 'pingList' in path:
-                # make sure all the servers do respond to a ping
-                for host in path['pingList']:
-                   if not isRespondingToPing(host):
-                      raise StopIteration
-                   
-        except StopIteration:
-           continue
-        # actually sync
-        syncDirectories(path['source'], path['destination'], path['name'] if 'name' in path else '')
-    notify = True    
+# some rsyncing data around
+for path in data.SYNC_PATHS:
+    try:
+        if 'pingList' in path:
+            # make sure all the servers do respond to a ping
+            for host in path['pingList']:
+               if not isRespondingToPing(host):
+                  raise StopIteration
+               
+    except StopIteration:
+       continue
+    # actually sync
+    syncDirectories(path['source'], path['destination'], path['name'] if 'name' in path else '')
+notify = True    
 
 
 # rsnapshot part
