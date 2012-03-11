@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+COMPUTER_NAME = 'Laptop'
 
 MOUNTED_DIR = '/home/username'
 WIRELESS_NETWORK_SSID = 'MyWireless'
@@ -14,3 +15,9 @@ SYNC_PATHS = [
      'destination': '"user@yourdomain.com:/home/user/some_dir/"',
      'pingList': ['yourdomain.com-invalidated']}
 ]
+
+SMTP_DOMAIN = 'example.com'
+SMTP_USER = 'user@example.com'
+SMTP_PASS = 'mypass'
+SMTP_FROM = 'packup <packup@example.com>'
+SMTP_TO = 'notification@example.com'

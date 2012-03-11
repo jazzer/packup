@@ -1,14 +1,34 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
-import paths
+import data
 import argparse, logging
 import sys, os, os.path, subprocess
 import datetime, time
 
 
-
 time_format = "%Y-%m-%d %H:%M:%S"
+
+# create logger
+logger = logging.getLogger('packup-logger')
+formatter = logging.Formatter('%(levelname)s: %(message)s')
+sysohdlr = logging.StreamHandler(sys.stdout)
+sysohdlr.setFormatter(formatter)
+logger.addHandler(sysohdlr)
+logger.setLevel(logging.DEBUG)
+
+dry = False
+verbose = True
+now = datetime.datetime.now()
+notify = False
+
+
+
+
+
+
+
+
 
 
 
@@ -25,7 +45,7 @@ def isDirectoryMounted(path):
 
 def isWirelessAvailible(SSID):
     logger.debug('Checking if wireless network named "%s" is availible...' % SSID)
-    output = getCommandOutput('sudo iwlist scan')
+    output = getCommandOutput('iwlist scan')
     if output.find('ESSID:"%s"' % SSID) > -1:
         logger.debug('It is availible.')
         return True
@@ -56,44 +76,24 @@ def afterHourOfDay(hour):
 
 
 # backup frequency related
-def isDailyBackupTime():
-    lastDateTime = getLastDateTime('daily')
-    hours = (now - lastDateTime).seconds / 3600 + (now - lastDateTime).days * 24
-    logger.debug('%i hours ago' % hours)
-    
-    # logic here
-    if hours >= 12 and now.day != lastDateTime.day:
-        return True
-    return False
-
-def isWeeklyBackupTime():
-    lastDateTime = getLastDateTime('weekly')
+def isOlder(days, title):
+    lastDateTime = getLastDateTime(title)
     days = (now - lastDateTime).days
     logger.debug('%i days ago' % days)
     
     # logic here
-    if days >= 7:
-        return True
-    return False
-
-def isMonthlyBackupTime():
-    lastDateTime = getLastDateTime('monthly')
-    days = (now - lastDateTime).days
-    logger.debug('%i days ago' % days)
-    
-    # logic here
-    if days >= 30:
+    if days >= days:
         return True
     return False
 
 
 def getLastDateTime(scope):
     try:
-        lastDateString = readFromFile(settingsDir + '/last_' + scope + '_datetime').strip()
+        lastDateString = readFromFile(settingsDir + scope + '_datetime').strip()
     except IOError:
         lastDateString = "2000-01-01 00:00:00"
     logger.debug('Current time: ' + str(now))
-    logger.info('Last %s backup: %s' % (scope, str(lastDateString)))
+    logger.info('Last %s: %s' % (scope, str(lastDateString)))
     lastDateTime = datetime.datetime.fromtimestamp(time.mktime(time.strptime(lastDateString, time_format)))
     return lastDateTime
 
@@ -129,15 +129,15 @@ def backupPackageSelection(targetPath = '~/packages.txt'):
         res = getCommandOutput('dpkg --get-selections', obeyDry = True)
         targetPath = targetPath.replace('~', homeDir)
         writeToFile(targetPath, res)
-        ownFile(targetPath)
+        ownFile(targetPath, username)
     return True    
 
 def downloadSingleFile(url, localFilename):
     localFilename = localFilename.replace('~', homeDir)
     # delete, download, own
     removeFile(localFilename)
-    executeCommand('wget -nc -O "%s" -c "%s"' % (localFilename, paths.GOOGLE_CALENDER_URL), obeyDry = True)
-    ownFile(localFilename)
+    executeCommand('wget -nc -O "%s" -c "%s"' % (localFilename, data.GOOGLE_CALENDER_URL), obeyDry = True)
+    ownFile(localFilename, username)
     return True
 
 def backupGoogleCalender(url, localFilename):
@@ -146,7 +146,7 @@ def backupGoogleCalender(url, localFilename):
 
 def syncDirectories(source, target, name=''):
     logger.info('Syncing directories%s' % ('...' if name == '' else ' (' + name + ')...'))
-    executeCommand("su %s -c 'rsync -avzrEL --delete %s %s'" % (username, source, target), obeyDry = True, shell=True)
+    executeCommand("su -c 'rsync -avzrEL --delete %s %s' %s" % (source, target, username), obeyDry = True, shell=True)
     return True
 
 def isRespondingToPing(host):
@@ -185,9 +185,9 @@ def executeCommand(command, obeyDry = False, shell = True, silent = False):
     proc.wait()
     return proc
 
-def ownFile(filename):
+def ownFile(filename, username):
     getCommandOutput('chown %s:%s %s' % (username, username, filename), obeyDry = True)
-def ownDir(path):
+def ownDir(path, username):
     getCommandOutput('chown -R %s:%s %s' % (username, username, path), obeyDry = True)
 
 def removeFile(filename):
@@ -212,17 +212,8 @@ def readFromFile(filename):
 
 
 
-# create logger
-logger = logging.getLogger('packup-logger')
-formatter = logging.Formatter('%(levelname)s: %(message)s')
-sysohdlr = logging.StreamHandler(sys.stdout)
-sysohdlr.setFormatter(formatter)
-logger.addHandler(sysohdlr)
 
-logger.setLevel(logging.DEBUG)
-dry = False
-verbose = True
-now = datetime.datetime.now()
+
 
 
 # parse arguments
@@ -230,26 +221,20 @@ parser = argparse.ArgumentParser(description='Backup script based on rsnapshot, 
 # TODO implement (verbose, dry-run, ...)
 
 
-# get username
-# more ideas: http://stackoverflow.com/questions/4598001/how-do-you-find-the-original-user-through-multiple-sudo-and-su-commands
-if not getCommandOutput('echo $SUDO_USER') == '':
-    username = getCommandOutput('echo $SUDO_USER')
-else:
-    username = getCommandOutput('id -un') # same as whoami
-# get home directory of that particular user
-homeDir = getCommandOutput('cat /etc/passwd | grep %s:x' % username)
-homeDir = homeDir.split(':')[-2]
+# get home directory
+username = getCommandOutput('logname')
+homeDir = os.path.expanduser('~/')
 # make hidden directory for settings and such
-settingsDir = homeDir + '/.packup'
+settingsDir = homeDir + '.packup/'
 try:
     os.mkdir(settingsDir)
 except OSError:
     pass
 # reown settings dir
-ownDir(settingsDir)
+ownDir(settingsDir, username)
 
 # now we can log to the apropriate file as well
-logFilename = settingsDir + '/runlog.log'
+logFilename = settingsDir + 'runlog.log'
 removeFile(logFilename)
 hdlr = logging.FileHandler(logFilename)
 hdlr.setFormatter(formatter)
@@ -258,71 +243,83 @@ logger.addHandler(hdlr)
 logger.info('Running in %s\'s account.' % username)
 logger.info('Home directory: %s' % homeDir)
 logger.info('Settings directory: %s' % settingsDir)
-ownFile(logFilename)
+ownFile(logFilename, username)
 
 
 # check if preconditions are met
-if not isDirectoryMounted(paths.MOUNTED_DIR):
+if not isWirelessConnected(data.WIRELESS_NETWORK_SSID):
     sys.exit(1)
-if not isWirelessConnected(paths.WIRELESS_NETWORK_SSID):
-    sys.exit(1)
-if not isWirelessAvailible(paths.WIRELESS_NETWORK_SSID):
-    sys.exit(1)
-if not afterHourOfDay(10):
-    sys.exit(1)
+#if not isWirelessAvailible(data.WIRELESS_NETWORK_SSID):
+#    sys.exit(1)
+#if not afterHourOfDay(10):
+#    sys.exit(1)
 
 
 
 # daily stuff
-if isDailyBackupTime():
+if isOlder(1, 'update'):
     # updates
     doSystemUpgrade()
     # save packages installed on the system
     backupPackageSelection()
     # save calender
-    backupGoogleCalender(paths.GOOGLE_CALENDER_URL, paths.GOOGLE_LOCAL_TARGET)
+    backupGoogleCalender(data.GOOGLE_CALENDER_URL, data.GOOGLE_LOCAL_TARGET)
+    writeToFile(settingsDir + 'update_datetime', now.strftime(time_format))
     pass
 
 
-# some rsyncing data around
-for path in paths.SYNC_PATHS:
-    try:
-        if 'pingList' in path:
-            # make sure all the servers do respond to a ping
-            for host in path['pingList']:
-               if not isRespondingToPing(host):
-                  raise StopIteration
-               
-    except StopIteration:
-       continue
-    # actually sync
-    syncDirectories(path['source'], path['destination'], path['name'] if 'name' in path else '')
-
+    # some rsyncing data around
+    for path in data.SYNC_PATHS:
+        try:
+            if 'pingList' in path:
+                # make sure all the servers do respond to a ping
+                for host in path['pingList']:
+                   if not isRespondingToPing(host):
+                      raise StopIteration
+                   
+        except StopIteration:
+           continue
+        # actually sync
+        syncDirectories(path['source'], path['destination'], path['name'] if 'name' in path else '')
+    notify = True    
 
 
 # rsnapshot part
-if isMonthlyBackupTime():
-    logger.info('Monthly backup...')
-    callRsnapshot('monthly')
-    writeToFile(settingsDir + '/last_monthly_datetime', now.strftime(time_format))
+rsnapshot_names = ['monthly', 'weekly', 'daily']
+rsnapshot_days = [30, 7, 1]
 
-if isWeeklyBackupTime():
-    logger.info('Weekly backup...')
-    callRsnapshot('weekly')
-    writeToFile(settingsDir + '/last_weekly_datetime', now.strftime(time_format))
-
-if isDailyBackupTime():
-    logger.info('Daily backup...')
-    callRsnapshot('daily')
-    writeToFile(settingsDir + '/last_daily_datetime', now.strftime(time_format))
+for i in range(0,3):
+    name = rsnapshot_names[i]
+    if isOlder(rsnapshot_days[i], name):
+        logger.info('%s backup...' % name)
+        if isDirectoryMounted(data.MOUNTED_DIR):
+            callRsnapshot(name) # TODO check success!, otherwise don't execute next two lines
+            writeToFile(settingsDir + '%s-rsnapshot_datetime' % name, now.strftime(time_format))
+            notify = True    
 
 
-# notifications
 # send log file via mail
+# Import smtplib for the actual sending function
+if notify:
+    import smtplib
+    from email.mime.text import MIMEText
 
+    fileh = open(logFilename, 'r', encoding='utf8')
+    message_text = fileh.read()
+    fileh.close()
+    msg = MIMEText(message_text, _charset='utf8')
+    date = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+    msg['Subject'] = "Backup beendet (%s)" % data.COMPUTER_NAME
+    msg['From'] = data.SMTP_FROM
+    msg['To'] = data.SMTP_TO
+    s = smtplib.SMTP(data.SMTP_DOMAIN)
+    s.login(data.SMTP_USER, data.SMTP_PASS)
+    s.sendmail(data.SMTP_USER, [data.SMTP_TO], msg.as_string())
+    s.quit()
 
 
 # cleanup
 # reown settings directory
-ownDir(settingsDir)
+ownDir(settingsDir, username)
+
 
