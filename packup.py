@@ -223,9 +223,9 @@ parser = argparse.ArgumentParser(description='Backup script based on rsnapshot, 
 
 # get home directory
 username = getCommandOutput('logname')
-homeDir = os.path.expanduser('~/')
+homeDir = os.path.expanduser('~')
 # make hidden directory for settings and such
-settingsDir = homeDir + '.packup/'
+settingsDir = homeDir + '/.packup/'
 try:
     os.mkdir(settingsDir)
 except OSError:
