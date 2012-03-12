@@ -112,7 +112,7 @@ def callRsnapshot(timecode):
     dateFilename = homeDir + '/backup_date.txt'
     # save date to file
     writeToFile(dateFilename, str(datetime.datetime.now()))
-    executeCommand('time sudo rsnapshot ' + timecode, obeyDry = True, shell=True)
+    executeCommand('time rsnapshot ' + timecode, obeyDry = True, shell=True)
     # remove date file
     removeFile(dateFilename)
     return True

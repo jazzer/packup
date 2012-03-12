@@ -48,7 +48,7 @@ and add
     # enable password-less backup
     johannes        ALL=(ALL)NOPASSWD:/home/johannes/Software/Backup/packup/packup.py
 
-whilst of course replacing your username and path. Exit vi(m) by typing :x and 
+whilst of course replacing your username and path. Exit vi(m) by typing :wq and 
 return.
 
 
