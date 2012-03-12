@@ -299,6 +299,12 @@ for i in range(0,3):
             callRsnapshot(name) # TODO check success!, otherwise don't execute next two lines
             writeToFile(settingsDir + '%s-rsnapshot_datetime' % name, now.strftime(time_format))
             notify = True    
+        # print backup size for a short overview
+        if rsnapshot_names[i] is 'daily':
+            try:
+                executeCommand('du -sh "%s"' % data.DAILY_BACKUP_PATH)
+            except AttributeError:
+                pass # not forcing anybody to do that check
 
 
 # send log file via mail
