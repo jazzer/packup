@@ -79,7 +79,7 @@ def afterHourOfDay(hour):
 def isOlder(days, title):
     lastDateTime = getLastDateTime(title)
     daysAgo = (now - lastDateTime).days
-    logger.debug('%i days ago' % days)
+    logger.debug('%i days ago' % daysAgo)
     
     # logic here
     if daysAgo >= days:
