@@ -87,13 +87,13 @@ def isOlder(days, title):
     return False
 
 
-def getLastDateTime(scope):
+def getLastDateTime(event):
     try:
-        lastDateString = readFromFile(settingsDir + scope + '_datetime').strip()
+        lastDateString = readFromFile(settingsDir + '/' + event + '_datetime').strip()
     except IOError:
         lastDateString = "2000-01-01 00:00:00"
     logger.debug('Current time: ' + str(now))
-    logger.info('Last %s: %s' % (scope, str(lastDateString)))
+    logger.info('Last %s: %s' % (event, str(lastDateString)))
     lastDateTime = datetime.datetime.fromtimestamp(time.mktime(time.strptime(lastDateString, time_format)))
     return lastDateTime
 
@@ -293,7 +293,7 @@ rsnapshot_days = [30, 7, 1]
 
 for i in range(0,3):
     name = rsnapshot_names[i]
-    if isOlder(rsnapshot_days[i], name):
+    if isOlder(rsnapshot_days[i], name + '-rsnapshot'):
         logger.info('%s backup...' % name)
         if isDirectoryMounted(data.MOUNTED_DIR):
             callRsnapshot(name) # TODO check success!, otherwise don't execute next two lines
