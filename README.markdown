@@ -5,6 +5,7 @@ It should work **very** similar for every other recent and decent Linux distribu
 
 ##### Requirements
 Install Git and python3 if they are not available yet:
+
     sudo apt-get install git python3 
 
 ##### Get the Code
