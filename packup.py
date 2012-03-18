@@ -78,11 +78,12 @@ def afterHourOfDay(hour):
 # backup frequency related
 def isOlder(days, title):
     lastDateTime = getLastDateTime(title)
-    daysAgo = (now - lastDateTime).days
+    daysAgo = (now - lastDateTime).days  
+    hoursAgo = (now - lastDateTime).seconds / 3600
     logger.debug('%i days ago' % daysAgo)
     
     # logic here
-    if daysAgo >= days:
+    if (daysAgo >= days) or (days - daysAgo == 1 and hoursAgo >= 20):
         return True
     return False
 
@@ -144,9 +145,9 @@ def backupGoogleCalender(url, localFilename):
     logger.info('Downloading Google calender...')
     return downloadSingleFile(url, localFilename)
 
-def syncDirectories(source, target, name=''):
+def syncDirectories(source, target, options, name=''):
     logger.info('Syncing directories%s' % ('...' if name == '' else ' (' + name + ')...'))
-    executeCommand("su -c 'rsync -avzrEL --delete %s %s' %s" % (source, target, username), obeyDry = True, shell=True)
+    executeCommand("su -c 'rsync -avzrEL --delete %s %s %s' %s" % (options, source, target, username), obeyDry = True, shell=True)
     return True
 
 def isRespondingToPing(host):
@@ -283,7 +284,7 @@ for path in data.SYNC_PATHS:
     except StopIteration:
        continue
     # actually sync
-    syncDirectories(path['source'], path['destination'], path['name'] if 'name' in path else '')
+    syncDirectories(path['source'], path['destination'], path['options'] if 'options' in path else '', path['name'] if 'name' in path else '')
 notify = True    
 
 
