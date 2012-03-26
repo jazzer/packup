@@ -124,7 +124,8 @@ def doSystemUpgrade():
     executeCommand('sudo apt-get dist-upgrade -y', obeyDry = True)
     return True
 
-def backupPackageSelection(targetPath = '~/packages.txt'):
+def backupPackageSelection():
+    targetPath = '~/packages.txt'
     logger.info('Backing up package selection...')
     if not dry:
         res = getCommandOutput('dpkg --get-selections', obeyDry = True)
@@ -306,6 +307,11 @@ for i in range(0,3):
                 executeCommand('du -sh "%s"' % data.DAILY_BACKUP_PATH)
             except AttributeError:
                 pass # not forcing anybody to do that check
+
+
+
+# remove package list
+removeFile(homeDir + '/packages.txt')
 
 
 # send log file via mail
