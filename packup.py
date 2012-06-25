@@ -148,8 +148,10 @@ def backupGoogleCalender(url, localFilename):
 
 def syncDirectories(source, target, options, name=''):
     logger.info('Syncing directories%s' % ('...' if name == '' else ' (' + name + ')...'))
-    executeCommand("su -c 'rsync -avzrEL --delete %s %s %s' %s" % (options, source, target, username), obeyDry = True, shell=True)
-    return True
+    if os.path.exists(source):
+        executeCommand("su -c 'rsync -avzrEL --delete --stats %s %s %s' %s" % (options, source, target, username), obeyDry = True, shell=True)
+        return True
+    return False
 
 def isRespondingToPing(host):
     good = ' 0% packet loss' in getCommandOutput('ping -qn -c 1 "%s"' % host, obeyDry = False)
@@ -248,15 +250,6 @@ logger.info('Settings directory: %s' % settingsDir)
 ownFile(logFilename, username)
 
 
-# check if preconditions are met
-if not isWirelessConnected(data.WIRELESS_NETWORK_SSID):
-    sys.exit(1)
-#if not isWirelessAvailible(data.WIRELESS_NETWORK_SSID):
-#    sys.exit(1)
-#if not afterHourOfDay(10):
-#    sys.exit(1)
-
-
 
 # daily stuff
 if isOlder(1, 'update'):
@@ -290,23 +283,24 @@ notify = True
 
 
 # rsnapshot part
-rsnapshot_names = ['monthly', 'weekly', 'daily']
-rsnapshot_days = [30, 7, 1]
+if isWirelessConnected(data.WIRELESS_NETWORK_SSID):
+    rsnapshot_names = ['monthly', 'weekly', 'daily']
+    rsnapshot_days = [30, 7, 1]
 
-for i in range(0,3):
-    name = rsnapshot_names[i]
-    if isOlder(rsnapshot_days[i], name + '-rsnapshot'):
-        logger.info('%s backup...' % name)
-        if isDirectoryMounted(data.MOUNTED_DIR):
-            callRsnapshot(name) # TODO check success!, otherwise don't execute next two lines
-            writeToFile(settingsDir + '%s-rsnapshot_datetime' % name, now.strftime(time_format))
-            notify = True    
-        # print backup size for a short overview
-        if rsnapshot_names[i] is 'daily':
-            try:
-                executeCommand('du -sh "%s"' % data.DAILY_BACKUP_PATH)
-            except AttributeError:
-                pass # not forcing anybody to do that check
+    for i in range(0,3):
+        name = rsnapshot_names[i]
+        if isOlder(rsnapshot_days[i], name + '-rsnapshot'):
+            logger.info('%s backup...' % name)
+            if isDirectoryMounted(data.MOUNTED_DIR):
+                callRsnapshot(name) # TODO check success!, otherwise don't execute next two lines
+                writeToFile(settingsDir + '%s-rsnapshot_datetime' % name, now.strftime(time_format))
+                notify = True    
+                # print backup size for a short overview
+                if rsnapshot_names[i] is 'daily':
+                    try:
+                        executeCommand('du -sh "%s"' % data.DAILY_BACKUP_PATH)
+                    except AttributeError:
+                        pass # not forcing anybody to do that check
 
 
 
